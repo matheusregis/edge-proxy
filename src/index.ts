@@ -12,7 +12,7 @@ function normalizeHost(raw = "") {
   return raw.split(",")[0].trim().toLowerCase().replace(/:\d+$/, "");
 }
 
-app.use(async (req, res) => {
+app.use(async (req: any, res) => {
   try {
     const host = normalizeHost(req.headers["x-forwarded-host"] || req.headers.host || "");
     if (!host) return res.status(400).send("Host header required");
@@ -33,7 +33,7 @@ app.use(async (req, res) => {
     res.setHeader("Cache-Control", "no-store"); // evitar cache
     return res.redirect(302, target);
 
-  } catch (err) {
+  } catch (err: any) {
     console.error("[EDGE] Erro:", err.message);
     return res.status(500).send("Internal proxy error");
   }
