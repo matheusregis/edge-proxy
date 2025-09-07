@@ -22,15 +22,21 @@ app.use(async (req: any, res) => {
     // chamada para API central
     const resp = await axios.get(`${API_URL}/domains/resolve`, {
       params: { host },
-      timeout: 5000, // evita travar se a API demorar
+      timeout: 5000,
     });
 
     const data = resp.data;
-    const target = data.blackOrigin || data.whiteOrigin;
+    let target = data.blackOrigin || data.whiteOrigin;
+
     if (!target) return res.status(500).send("Nenhum destino configurado");
 
+    // 🔑 garante que sempre será URL absoluta https://
+    if (!/^https?:\/\//i.test(target)) {
+      target = `https://${target}`;
+    }
+
     console.log(`[EDGE] Redirecionando ${host} -> ${target}`);
-    res.setHeader("Cache-Control", "no-store"); // evitar cache
+    res.setHeader("Cache-Control", "no-store");
     return res.redirect(302, target);
 
   } catch (err: any) {
