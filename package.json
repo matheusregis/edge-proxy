@@ -1,0 +1,16 @@
+{
+  "name": "cloakerguard-edge",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "dev": "ts-node-dev --respawn --transpile-only src/edge.ts",
+    "build": "tsc",
+    "start": "node dist/edge.js"
+  },
+  "dependencies": {
+    "@types/node": "^24.3.1",
+    "axios": "^1.11.0",
+    "dotenv": "^17.2.2",
+    "express": "^5.1.0"
+  }
+}
