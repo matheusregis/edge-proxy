@@ -5,7 +5,7 @@ import * as dotenv from "dotenv";
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 8080;
+const PORT = Number(process.env.PORT || 8080);
 const API_URL = process.env.API_URL || "https://api.cloakerguard.com.br";
 
 // Funções de log seguras (stdout/stderr direto)
@@ -95,6 +95,6 @@ app.use(async (req: any, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  log(`🌍 Edge rodando na porta ${PORT}`);
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`🌍 Edge rodando na porta ${PORT}`);
 });
