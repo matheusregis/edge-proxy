@@ -34,13 +34,13 @@ app.use(async (req: any, res) => {
     if (!host) return res.status(400).send("Host header required");
 
     console.log("[EDGE] Requisição recebida para host:", host);
-
+    console.log("[DEBUG UA]", req.headers['user-agent']);
     // chamada para API central
     const resp = await axios.get(`${API_URL}/domains/resolve`, {
       params: { host },
       timeout: 5000,
     });
-
+    
     const data = resp.data;
     let target = normalizeTarget(data.blackOrigin || data.whiteOrigin);
 
