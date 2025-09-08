@@ -34,7 +34,7 @@ app.use(async (req: any, res) => {
     if (!host) return res.status(400).send("Host header required");
 
     console.log("[EDGE] Requisição recebida para host:", host);
-    console.log("[DEBUG UA]", req.headers['user-agent']);
+    console.error("[DEBUG UA]", req.headers['user-agent'] || "(sem UA)");
     // chamada para API central
     const resp = await axios.get(`${API_URL}/domains/resolve`, {
       params: { host },
