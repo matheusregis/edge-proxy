@@ -50,6 +50,7 @@ app.use(async (req: any, res) => {
     }
 
     console.log(`[EDGE] Redirecionando ${host} -> ${target}`);
+    //teste
 
     res.setHeader("Cache-Control", "no-store");
     return res.redirect(302, target);
