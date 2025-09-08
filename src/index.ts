@@ -12,6 +12,22 @@ function normalizeHost(raw = "") {
   return raw.split(",")[0].trim().toLowerCase().replace(/:\d+$/, "");
 }
 
+// 🔑 garante URL absoluta com https://
+function normalizeTarget(url: string | undefined | null): string | null {
+  if (!url) return null;
+  let clean = url.trim();
+
+  // remove qualquer / extra no começo
+  clean = clean.replace(/^\/+/, "");
+
+  // se não tiver https:// no começo, adiciona
+  if (!/^https?:\/\//i.test(clean)) {
+    clean = `https://${clean}`;
+  }
+
+  return clean;
+}
+
 app.use(async (req: any, res) => {
   try {
     const host = normalizeHost(req.headers["x-forwarded-host"] || req.headers.host || "");
@@ -26,16 +42,15 @@ app.use(async (req: any, res) => {
     });
 
     const data = resp.data;
-    let target = data.blackOrigin || data.whiteOrigin;
+    let target = normalizeTarget(data.blackOrigin || data.whiteOrigin);
 
-    if (!target) return res.status(500).send("Nenhum destino configurado");
-
-    // 🔑 garante que sempre será URL absoluta https://
-    if (!/^https?:\/\//i.test(target)) {
-      target = `https://${target}`;
+    if (!target) {
+      console.error("[EDGE] Nenhum destino configurado para host:", host, "data:", data);
+      return res.status(500).send("Nenhum destino configurado");
     }
 
     console.log(`[EDGE] Redirecionando ${host} -> ${target}`);
+
     res.setHeader("Cache-Control", "no-store");
     return res.redirect(302, target);
 
