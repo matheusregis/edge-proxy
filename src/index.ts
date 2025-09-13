@@ -84,12 +84,24 @@ app.use(async (req: any, res) => {
         ua
       );
 
-    let target: string | null = isBot
-      ? normalizeTarget(data.whiteOrigin)
-      : normalizeTarget(data.blackOrigin);
+    let target: string | null = null;
 
+    if (isBot) {
+      target = normalizeTarget(data.whiteOrigin);
+      log(
+        `[EDGE] Decisão: BOT detectado → encaminhando para WHITE URL: ${target}`
+      );
+    } else {
+      target = normalizeTarget(data.blackOrigin);
+      log(
+        `[EDGE] Decisão: HUMANO detectado → encaminhando para BLACK URL: ${target}`
+      );
+    }
+
+    // fallback se nenhum configurado
     if (!target) {
       target = normalizeTarget(data.blackOrigin || data.whiteOrigin);
+      log(`[EDGE] Aviso: fallback acionado → target final: ${target}`);
     }
 
     if (!target) {
