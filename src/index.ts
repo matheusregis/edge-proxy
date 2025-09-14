@@ -47,6 +47,11 @@ function isIgnoredPath(path: string): boolean {
   );
 }
 
+app.get("/__edge-check", (req, res) => {
+  console.log("[EDGE] Healthcheck recebido");
+  res.status(200).send("ok");
+});
+
 app.use(async (req: any, res) => {
   try {
     const host = normalizeHost(
@@ -147,11 +152,6 @@ app.use(async (req: any, res) => {
     error("[EDGE] Erro:", err.message);
     return res.status(500).send("Internal proxy error");
   }
-});
-
-app.get("/__edge-check", (req, res) => {
-  console.log("[EDGE] Healthcheck recebido");
-  res.status(200).send("ok");
 });
 
 app.listen(PORT, "0.0.0.0", () => {
