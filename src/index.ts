@@ -150,6 +150,7 @@ app.use(async (req: any, res) => {
 });
 
 app.get("/__edge-check", (req, res) => {
+  console.log("[EDGE] Healthcheck recebido");
   res.status(200).send("ok");
 });
 
