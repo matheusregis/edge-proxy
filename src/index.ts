@@ -149,6 +149,10 @@ app.use(async (req: any, res) => {
   }
 });
 
+app.get("/__edge-check", (req, res) => {
+  res.status(200).send("ok");
+});
+
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`🌍 Edge rodando na porta ${PORT}`);
 });
